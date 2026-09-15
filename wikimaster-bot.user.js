@@ -426,15 +426,23 @@
 
                     const priceInfo = await computeSellPrice(rarity, id);
 
+                    // Aucune vente connue sur le marché pour cette carte + rareté C/PC :
+                    // personne ne l'achète jamais à ce niveau de rareté, pas la peine
+                    // d'immobiliser un slot d'enchère → défausse directe.
+                    const noHistoryCommon = priceInfo.source === 'floor' && (rarity === 'C' || rarity === 'PC');
+
                     // Sous le seuil : l'enchère rapporterait moins que la défausse (1 💰
                     // garanti, immédiat) et risque en plus de ne trouver aucun acheteur.
-                    if (priceInfo.price < discardThreshold) {
+                    if (priceInfo.price < discardThreshold || noHistoryCommon) {
                         setSellStatus(`🗑️ Défausse : ${title}...`);
                         const result = await discardViaUI(title);
                         if (result.ok) {
                             sellStats.discarded++;
                             sellStats.discardedValue += 1;
-                            log(`🗑️ Défaussé (prix ${priceInfo.price} 💰 < seuil ${discardThreshold}) : <b>${title}</b> [${rarity}] · +1 💰`);
+                            const why = noHistoryCommon
+                                ? `aucune vente connue, rareté ${rarity}`
+                                : `prix ${priceInfo.price} 💰 < seuil ${discardThreshold}`;
+                            log(`🗑️ Défaussé (${why}) : <b>${title}</b> [${rarity}] · +1 💰`);
                         } else {
                             sellStats.failed++;
                             log(`❌ Échec défausse : <b>${title}</b> [${rarity}] · ${result.reason || '?'}`);

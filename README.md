@@ -27,7 +27,9 @@ Met automatiquement en vente toute ta collection, **sauf tes favoris**, pour max
 - **Prix** : le bot regarde l'historique des ventes de chaque carte sur le marché et la met en vente à **marge % au-dessus du prix moyen** (110% par défaut, réglable). Si aucune vente n'est connue pour la carte, il utilise le **prix plancher par rareté** que tu définis dans le panneau.
 - **Durée d'enchère** réglable (10 min à 24 h).
 - **🛡️ Protection des Légendaires (L)** : activée par défaut, ces cartes ne sont jamais mises en vente même sans les mettre en favori.
-- **🗑️ Défausse automatique** : si le prix calculé pour une carte est **sous le seuil réglable (10 💰 par défaut)**, le bot clique directement sur le bouton **« Défausser »** de la fiche carte au lieu de la mettre aux enchères — 1 💰 garanti et immédiat plutôt qu'une enchère à 2-3 💰 qui risque de ne trouver aucun acheteur.
+- **🗑️ Défausse automatique**, dans deux cas — le bot clique directement sur le bouton **« Défausser »** de la fiche carte au lieu de la mettre aux enchères (1 💰 garanti et immédiat) :
+  - le prix calculé est **sous le seuil réglable** (10 💰 par défaut) ;
+  - **aucune vente n'est connue sur le marché pour cette carte ET sa rareté est C ou PC** — à ce niveau de rareté sans historique de vente, ça ne vaut pas la peine d'immobiliser un slot d'enchère.
 - **Mots-clés à toujours exclure** : une whitelist par mots-clés séparés par `;` (par défaut : `triathlon`), en plus des favoris et des Légendaires. Le matching regarde le **titre, la catégorie et la description** de la carte — pas que le titre exact — donc `triathlon` protège toute carte liée au thème, pas seulement une carte titrée « Triathlon ».
 - Il essaie d'abord la vente rapide (API), et si le site la refuse, bascule automatiquement sur une simulation de clic sur la page **Collection** — **reste sur cet onglet, sur `/collection` si possible**, pendant que le module tourne.
 - Il retraite toute la collection toutes les 5 minutes (pour couvrir les nouvelles cartes obtenues entre-temps).
