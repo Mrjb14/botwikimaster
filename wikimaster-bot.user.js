@@ -305,8 +305,10 @@
         }
         return null;
     }
+    // "includes" plutôt qu'une égalité stricte : les boutons du site combinent souvent
+    // icône + texte + badge (ex: "🗑️ Défausser ⊙+1"), jamais juste le libellé seul.
     function findButtonByText(text) {
-        return [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === text) || null;
+        return [...document.querySelectorAll('button')].find((b) => b.textContent.trim().includes(text)) || null;
     }
     async function ensureOnCollectionPage() {
         if (location.pathname.startsWith('/collection')) return true;
