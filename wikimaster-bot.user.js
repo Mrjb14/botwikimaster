@@ -374,7 +374,19 @@
         const discardBtn = findButtonByText('Défausser');
         if (!discardBtn) return { ok: false, reason: 'no_discard_button' };
         discardBtn.click();
-        await sleep(600); // immédiat, pas de pop-up de confirmation à gérer
+        await sleep(500);
+
+        // Défausser le DERNIER exemplaire d'une carte (perte définitive) affiche une
+        // confirmation avec un second bouton qui porte aussi le texte "Défausser" —
+        // on l'identifie en excluant l'élément déjà cliqué (pas de duplicata copies,
+        // pas de confirmation : ce second bouton n'existe alors simplement pas).
+        const confirmBtn = [...document.querySelectorAll('button')]
+            .filter((b) => b.textContent.trim().includes('Défausser'))
+            .find((b) => b !== discardBtn);
+        if (confirmBtn) {
+            confirmBtn.click();
+            await sleep(500);
+        }
 
         // Pas besoin de vider le champ de recherche ici : le prochain openCardTile()
         // y écrit directement le titre suivant, effacer avant est un aller-retour pour rien.
