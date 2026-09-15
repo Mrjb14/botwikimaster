@@ -257,19 +257,20 @@
 
     // ── Prix ──
 
-    async function fetchMarketAvg(id) {
+    // Réponse confirmée (onglet Réseau) : {"wikipedia_title": "...", "summary": { "UR": { "average": 117 } }, "isPro": false}
+    // — groupée PAR RARETÉ, pas une liste de ventes à moyenner nous-mêmes.
+    async function fetchCardPriceSummary(id) {
         try {
-            const res = await fetch(`${MARKETPLACE_URL}/cards/${id}/sales`, { credentials: 'include' });
+            const res = await fetch(`${MARKETPLACE_URL}/cards/${id}/sales?scope=summary`, { credentials: 'include' });
             if (!res.ok) return null;
             const data = await res.json();
-            const prices = (data.sales || []).map((s) => s.final_price).filter((p) => Number.isFinite(p));
-            if (!prices.length) return null;
-            return Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+            return data.summary || null;
         } catch (e) { return null; }
     }
 
     async function computeSellPrice(rarity, id) {
-        const avg = id ? await fetchMarketAvg(id) : null;
+        const summary = id ? await fetchCardPriceSummary(id) : null;
+        const avg = summary && summary[rarity] && Number.isFinite(summary[rarity].average) ? summary[rarity].average : null;
         if (avg && avg > 0) {
             return { price: Math.max(1, Math.round(avg * (sellMarginPct / 100))), source: 'market', avg };
         }
