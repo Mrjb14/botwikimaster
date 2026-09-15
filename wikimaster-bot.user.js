@@ -373,8 +373,8 @@
         discardBtn.click();
         await sleep(600); // immédiat, pas de pop-up de confirmation à gérer
 
-        const nextSearch = document.querySelector('input[placeholder="Rechercher par titre ou catégorie..."]');
-        if (nextSearch) setReactInputValue(nextSearch, '');
+        // Pas besoin de vider le champ de recherche ici : le prochain openCardTile()
+        // y écrit directement le titre suivant, effacer avant est un aller-retour pour rien.
         return { ok: true };
     }
 
@@ -425,9 +425,8 @@
 
         if (document.body.contains(launchBtn)) return { ok: false, reason: 'refused' };
 
-        await ensureOnCollectionPage();
-        const nextSearch = document.querySelector('input[placeholder="Rechercher par titre ou catégorie..."]');
-        if (nextSearch) setReactInputValue(nextSearch, '');
+        // Le lancement navigue vers la page de l'enchère créée ; le prochain openCardTile()
+        // ramènera sur /collection et écrira directement le titre suivant dans la recherche.
         return { ok: true };
     }
 
@@ -521,7 +520,9 @@
                                 continue cardLoop;
                             }
                             renderSellStats();
-                            await sleep(1200 + Math.random() * 1800);
+                            // Une défausse ne consomme pas de slot d'enchère et n'a pas grand
+                            // chose à voir avec une mise en vente réelle : délai bien plus court.
+                            await sleep(400 + Math.random() * 500);
                             continue;
                         }
 
