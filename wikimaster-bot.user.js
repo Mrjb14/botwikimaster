@@ -352,18 +352,21 @@
         if (!searchInput) return { ok: false, reason: 'no_search_input' };
         setReactInputValue(searchInput, title);
 
+        // Vérifie tout de suite (souvent déjà rendu) avant de commencer à attendre —
+        // ne dort qu'entre deux essais, jamais avant le premier.
         let tile = null;
-        for (let i = 0; i < 20 && !tile; i++) {
-            await sleep(250);
+        for (let i = 0; i < 25 && !tile; i++) {
             const titleEl = findLeafByExactText(title);
-            if (!titleEl) continue;
-            let candidate = titleEl;
-            while (candidate && !candidate.classList.contains('cursor-pointer')) candidate = candidate.parentElement;
-            if (candidate) tile = candidate;
+            if (titleEl) {
+                let candidate = titleEl;
+                while (candidate && !candidate.classList.contains('cursor-pointer')) candidate = candidate.parentElement;
+                if (candidate) tile = candidate;
+            }
+            if (!tile) await sleep(120);
         }
         if (!tile) return { ok: false, reason: 'card_not_found' };
         tile.click();
-        await sleep(600);
+        await sleep(250);
         return { ok: true };
     }
 
@@ -374,7 +377,7 @@
         const discardBtn = findButtonByText('Défausser');
         if (!discardBtn) return { ok: false, reason: 'no_discard_button' };
         discardBtn.click();
-        await sleep(500);
+        await sleep(200);
 
         // Défausser le DERNIER exemplaire d'une carte (perte définitive) affiche une
         // confirmation avec un second bouton qui porte aussi le texte "Défausser" —
@@ -385,7 +388,7 @@
             .find((b) => b !== discardBtn);
         if (confirmBtn) {
             confirmBtn.click();
-            await sleep(500);
+            await sleep(250);
         }
 
         // Pas besoin de vider le champ de recherche ici : le prochain openCardTile()
@@ -408,7 +411,7 @@
         const sellBtn = findButtonByText('Mettre aux enchères');
         if (!sellBtn) return { ok: false, reason: 'no_sell_button' };
         sellBtn.click();
-        await sleep(500);
+        await sleep(250);
 
         const slots = readAuctionSlots();
         if (slots && slots.used >= slots.max) {
@@ -421,7 +424,7 @@
         if (priceInput) {
             const target = String(Math.max(1, Math.round(price)));
             setReactInputValue(priceInput, target);
-            await sleep(150);
+            await sleep(100);
             if (priceInput.value !== target) {
                 log(`⚠️ Prix pas confirmé pour <b>${title}</b> (champ = "${priceInput.value}", attendu ${target}) — vente probablement au prix par défaut du site.`);
             }
@@ -431,12 +434,12 @@
 
         const durBtn = DURATION_LABELS[duration] && findButtonByText(DURATION_LABELS[duration]);
         if (durBtn) durBtn.click();
-        await sleep(200);
+        await sleep(120);
 
         const launchBtn = findButtonByText("Lancer l'enchère");
         if (!launchBtn) return { ok: false, reason: 'no_launch_button' };
         launchBtn.click();
-        await sleep(900);
+        await sleep(500);
 
         if (document.body.contains(launchBtn)) return { ok: false, reason: 'refused' };
 
@@ -536,8 +539,8 @@
                             }
                             renderSellStats();
                             // Une défausse ne consomme pas de slot d'enchère et n'a pas grand
-                            // chose à voir avec une mise en vente réelle : délai bien plus court.
-                            await sleep(400 + Math.random() * 500);
+                            // chose à voir avec une mise en vente réelle : délai minimal.
+                            await sleep(100 + Math.random() * 150);
                             continue;
                         }
 
@@ -570,7 +573,7 @@
                             continue cardLoop;
                         }
                         renderSellStats();
-                        await sleep(1200 + Math.random() * 1800);
+                        await sleep(500 + Math.random() * 700);
                     }
                 }
 
