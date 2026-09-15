@@ -218,7 +218,10 @@
     let sellExcludeRaw = getSetting('sellExcludeRaw', 'triathlon');
     let protectLegendary = getSetting('protectLegendary', true);
     let discardThreshold = getSetting('discardThreshold', 10);
-    let keepCopies = getSetting('keepCopies', 1);
+    // 0 par défaut : la demande initiale est de vendre TOUTE la collection sauf
+    // favoris/L/exclusions, pas de garder un exemplaire de chaque carte. Sur une
+    // collection sans doublons (le cas courant), un défaut à 1 bloquait tout.
+    let keepCopies = getSetting('keepCopies', 0);
     let protectLastWorthlessCopy = getSetting('protectLastWorthlessCopy', false);
     let rarityFloors = getSetting('rarityFloors', { L: 300, UR: 80, SR: 30, R: 10, PC: 3, C: 1 });
 
@@ -430,17 +433,25 @@
 
     // ── Boucle principale du vendeur ──
 
+    // Rareté croissante (C d'abord, L en dernier) : les communes sont surtout des
+    // défausses rapides (pas d'enchère, pas de contention sur le quota de slots),
+    // ça fait de l'avancement visible tout de suite plutôt que de rester bloqué sur
+    // des Légendaires/UR qui demandent plus de temps (mise en vente, slots limités).
+    const RARITY_ASCENDING = ['C', 'PC', 'R', 'SR', 'UR', 'L'];
+
     function buildSellQueue(items) {
         const excluded = excludedKeywords();
-        return items.filter((item) => {
-            const id = cardId(item);
-            if (!id) return false;
-            if (wishlistIds.has(id)) return false;
-            if (protectLegendary && cardRarity(item) === 'L') return false;
-            const text = cardSearchText(item);
-            if (excluded.some((kw) => text.includes(kw))) return false;
-            return true;
-        });
+        return items
+            .filter((item) => {
+                const id = cardId(item);
+                if (!id) return false;
+                if (wishlistIds.has(id)) return false;
+                if (protectLegendary && cardRarity(item) === 'L') return false;
+                const text = cardSearchText(item);
+                if (excluded.some((kw) => text.includes(kw))) return false;
+                return true;
+            })
+            .sort((a, b) => RARITY_ASCENDING.indexOf(cardRarity(a)) - RARITY_ASCENDING.indexOf(cardRarity(b)));
     }
 
     async function sellLoop(epoch) {

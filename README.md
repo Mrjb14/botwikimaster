@@ -24,7 +24,8 @@ C'est un script **Tampermonkey** : il s'exécute directement dans ton navigateur
 
 Met automatiquement en vente toute ta collection, **sauf tes favoris**, pour maximiser l'argent du jeu.
 
-- **📎 Exemplaires à garder par carte** (1 par défaut) : s'applique uniquement aux cartes qui ont une **vraie valeur marchande** — le bot écoule les doublons au-delà de ce nombre, exemplaire par exemplaire, et garde toujours au moins 1 exemplaire de ces cartes-là. La collection est rechargée à chaque passe (toutes les 5 min), donc il continue naturellement tant qu'il reste des doublons.
+- **📎 Exemplaires à garder par carte** (0 par défaut — vend tout) : s'applique uniquement aux cartes qui ont une **vraie valeur marchande**. Mets-le à 1+ si tu préfères garder un exemplaire de chaque carte valable ; sur une collection sans doublons, ça bloquerait alors toute vente de cartes de valeur. La collection est rechargée à chaque passe (toutes les 5 min), donc il continue naturellement tant qu'il reste des doublons.
+- **Ordre de traitement** : rareté croissante (C → PC → R → SR → UR → L) — les communes sont surtout des défausses rapides, ça avance vite et visiblement avant de passer aux cartes plus rares qui demandent plus de temps (enchère, quota de slots limité).
 - **🛡️ Garder quand même 1 exemplaire des cartes sans valeur** (décoché par défaut) : par défaut, une carte jugée sans valeur (prix sous le seuil, ou C/PC sans historique de vente) est défaussée **même si c'est ton seul exemplaire** — sinon, si tu n'as aucun doublon dans toute ta collection, rien n'est jamais défaussé. Coche cette case si tu préfères garder 1 exemplaire de chaque carte quoi qu'il arrive.
 
 - **Prix** : le bot regarde l'historique des ventes de chaque carte sur le marché et la met en vente à **marge % au-dessus du prix moyen** (110% par défaut, réglable). Si aucune vente n'est connue pour la carte, il utilise le **prix plancher par rareté** que tu définis dans le panneau.
