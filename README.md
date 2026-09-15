@@ -33,6 +33,7 @@ Met automatiquement en vente toute ta collection, **sauf tes favoris**, pour max
 - **Mots-clés à toujours exclure** : une whitelist par mots-clés séparés par `;` (par défaut : `triathlon`), en plus des favoris et des Légendaires. Le matching regarde le **titre, la catégorie et la description** de la carte — pas que le titre exact — donc `triathlon` protège toute carte liée au thème, pas seulement une carte titrée « Triathlon ».
 - Il essaie d'abord la vente rapide (API), et si le site la refuse, bascule automatiquement sur une simulation de clic sur la page **Collection** — **reste sur cet onglet, sur `/collection` si possible**, pendant que le module tourne.
 - Il retraite toute la collection toutes les 5 minutes (pour couvrir les nouvelles cartes obtenues entre-temps).
+- **Quota d'enchères actives** : le site limite le nombre d'enchères simultanées (visible dans le modal de vente, ex: « Enchères actives : 0/5 »). Le bot le détecte et met la vente en pause dès qu'il est atteint, plutôt que d'insister pour rien — il retente à la prochaine analyse (5 min).
 
 ### ⭐ Protection des favoris
 

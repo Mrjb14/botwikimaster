@@ -361,6 +361,14 @@
         return { ok: true };
     }
 
+    // Le modal de mise en vente affiche "Enchères actives : X/Y" — une limite du nombre
+    // d'enchères simultanées existe (compte gratuit vs abonné). Si le quota est atteint,
+    // "Lancer l'enchère" échouerait de toute façon : autant le détecter avant de cliquer.
+    function readAuctionSlots() {
+        const m = document.body.textContent.match(/Enchères actives\s*:\s*(\d+)\s*\/\s*(\d+)/);
+        return m ? { used: parseInt(m[1], 10), max: parseInt(m[2], 10) } : null;
+    }
+
     async function sellViaUI(title, price, duration) {
         const opened = await openCardTile(title);
         if (!opened.ok) return opened;
@@ -369,6 +377,13 @@
         if (!sellBtn) return { ok: false, reason: 'no_sell_button' };
         sellBtn.click();
         await sleep(500);
+
+        const slots = readAuctionSlots();
+        if (slots && slots.used >= slots.max) {
+            const cancelBtn = findButtonByText('Annuler');
+            if (cancelBtn) cancelBtn.click();
+            return { ok: false, reason: 'slots_full', slots };
+        }
 
         const priceInput = document.querySelector('input[aria-label="Mise de départ"]');
         if (priceInput) setReactInputValue(priceInput, String(Math.max(1, Math.round(price))));
@@ -470,6 +485,11 @@
                         sellStats.estimatedValue += priceInfo.price;
                         const src = priceInfo.source === 'market' ? ` (marché ${priceInfo.avg} × ${sellMarginPct}%)` : ' (barème rareté, pas d\'historique)';
                         log(`✅ Vendu : <b>${title}</b> [${rarity}] · ${priceInfo.price} 💰${src}`);
+                    } else if (result.reason === 'slots_full') {
+                        // Pas un échec de LA carte : le quota d'enchères actives est plein.
+                        // Inutile d'essayer les suivantes maintenant, ça échouerait pareil.
+                        log(`⏸ Quota d'enchères actives atteint (${result.slots.used}/${result.slots.max}) — pause de la vente jusqu'à la prochaine analyse.`);
+                        break;
                     } else {
                         sellStats.failed++;
                         log(`❌ Échec vente : <b>${title}</b> [${rarity}] · ${result.reason || '?'}`);
