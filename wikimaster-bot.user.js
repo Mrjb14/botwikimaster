@@ -48,6 +48,24 @@
     function cardRarity(c) {
         return (c.rarity || (c.card && c.card.rarity) || '?').toUpperCase();
     }
+    // Texte élargi pour le matching par mot-clé (titre + catégorie + description) : une
+    // exclusion comme "triathlon" doit aussi attraper une carte dont le THÈME est le
+    // triathlon même si le mot n'apparaît pas dans son titre exact.
+    function cardSearchText(c) {
+        const keys = ['wikipedia_title', 'title', 'name', 'category', 'categories', 'description', 'desc', 'summary', 'extract', 'wikipedia_extract'];
+        const parts = [];
+        const collect = (o) => {
+            if (!o || typeof o !== 'object') return;
+            for (const k of keys) {
+                const v = o[k];
+                if (typeof v === 'string') parts.push(v);
+                else if (Array.isArray(v)) parts.push(v.filter((x) => typeof x === 'string').join(' '));
+            }
+        };
+        collect(c);
+        collect(c.card);
+        return parts.join(' ').toLowerCase();
+    }
     function cardId(c) {
         return c.card_id || (c.card && c.card.id) || null;
     }
@@ -201,10 +219,11 @@
 
     let sellMarginPct = getSetting('sellMarginPct', 110);
     let sellDuration = getSetting('sellDuration', 60);
-    let sellExcludeRaw = getSetting('sellExcludeRaw', '');
+    let sellExcludeRaw = getSetting('sellExcludeRaw', 'triathlon');
+    let protectLegendary = getSetting('protectLegendary', true);
     let rarityFloors = getSetting('rarityFloors', { L: 300, UR: 80, SR: 30, R: 10, PC: 3, C: 1 });
 
-    function excludedTitles() {
+    function excludedKeywords() {
         return sellExcludeRaw.split(';').map((s) => s.trim().toLowerCase()).filter(Boolean);
     }
 
@@ -349,13 +368,14 @@
     // ── Boucle principale du vendeur ──
 
     function buildSellQueue(items) {
-        const excluded = excludedTitles();
+        const excluded = excludedKeywords();
         return items.filter((item) => {
             const id = cardId(item);
             if (!id) return false;
             if (wishlistIds.has(id)) return false;
-            const title = cardTitle(item).toLowerCase();
-            if (excluded.some((t) => title.includes(t))) return false;
+            if (protectLegendary && cardRarity(item) === 'L') return false;
+            const text = cardSearchText(item);
+            if (excluded.some((kw) => text.includes(kw))) return false;
             return true;
         });
     }
@@ -524,9 +544,13 @@
                 </div>
                 <div class="wmbot-row"><label>Prix plancher par rareté (si aucun historique marché)</label></div>
                 <div class="wmbot-rarity-grid" id="wmbot-floors"></div>
+                <div class="wmbot-row">
+                    <label for="wmbot-protect-l">🛡️ Ne jamais vendre les Légendaires (L)</label>
+                    <input type="checkbox" id="wmbot-protect-l" ${protectLegendary ? 'checked' : ''}>
+                </div>
                 <div class="wmbot-row" style="flex-direction: column; align-items: stretch;">
-                    <label for="wmbot-exclude">Cartes à toujours exclure (séparées par ;)</label>
-                    <input type="text" id="wmbot-exclude" placeholder="Ex: Carte A;Carte B" value="${sellExcludeRaw.replace(/"/g, '&quot;')}">
+                    <label for="wmbot-exclude">Mots-clés à toujours exclure (titre, catégorie ou description — séparés par ;)</label>
+                    <input type="text" id="wmbot-exclude" placeholder="Ex: triathlon;Carte A" value="${sellExcludeRaw.replace(/"/g, '&quot;')}">
                 </div>
                 <div class="wmbot-status" id="wmbot-sell-status"></div>
                 <div class="wmbot-stats" id="wmbot-sell-stats"></div>
@@ -548,6 +572,7 @@
             margin: panel.querySelector('#wmbot-margin'),
             duration: panel.querySelector('#wmbot-duration'),
             floors: panel.querySelector('#wmbot-floors'),
+            protectL: panel.querySelector('#wmbot-protect-l'),
             exclude: panel.querySelector('#wmbot-exclude'),
             sellStatus: panel.querySelector('#wmbot-sell-status'),
             sellStats: panel.querySelector('#wmbot-sell-stats'),
@@ -579,6 +604,11 @@
         els.exclude.onchange = () => {
             sellExcludeRaw = els.exclude.value;
             setSetting('sellExcludeRaw', sellExcludeRaw);
+        };
+        els.protectL.onchange = () => {
+            protectLegendary = els.protectL.checked;
+            setSetting('protectLegendary', protectLegendary);
+            log(protectLegendary ? '🛡️ Protection des Légendaires activée.' : '⚠️ Protection des Légendaires désactivée.');
         };
         panel.querySelectorAll('.wmbot-floor-input').forEach((input) => {
             input.onchange = () => {

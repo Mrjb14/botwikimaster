@@ -26,7 +26,8 @@ Met automatiquement en vente toute ta collection, **sauf tes favoris**, pour max
 
 - **Prix** : le bot regarde l'historique des ventes de chaque carte sur le marché et la met en vente à **marge % au-dessus du prix moyen** (110% par défaut, réglable). Si aucune vente n'est connue pour la carte, il utilise le **prix plancher par rareté** que tu définis dans le panneau.
 - **Durée d'enchère** réglable (10 min à 24 h).
-- **Cartes à toujours exclure** : une liste de titres séparés par `;`, en plus des favoris.
+- **🛡️ Protection des Légendaires (L)** : activée par défaut, ces cartes ne sont jamais mises en vente même sans les mettre en favori.
+- **Mots-clés à toujours exclure** : une whitelist par mots-clés séparés par `;` (par défaut : `triathlon`), en plus des favoris et des Légendaires. Le matching regarde le **titre, la catégorie et la description** de la carte — pas que le titre exact — donc `triathlon` protège toute carte liée au thème, pas seulement une carte titrée « Triathlon ».
 - Il essaie d'abord la vente rapide (API), et si le site la refuse, bascule automatiquement sur une simulation de clic sur la page **Collection** — **reste sur cet onglet, sur `/collection` si possible**, pendant que le module tourne.
 - Il retraite toute la collection toutes les 5 minutes (pour couvrir les nouvelles cartes obtenues entre-temps).
 
