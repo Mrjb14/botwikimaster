@@ -214,7 +214,7 @@
     const sellStats = { listed: 0, failed: 0, estimatedValue: 0, discarded: 0, discardedValue: 0 };
 
     let sellMarginPct = getSetting('sellMarginPct', 110);
-    let sellDuration = getSetting('sellDuration', 60);
+    let sellDuration = getSetting('sellDuration', 10);
     let sellExcludeRaw = getSetting('sellExcludeRaw', 'triathlon');
     let protectLegendary = getSetting('protectLegendary', true);
     let discardThreshold = getSetting('discardThreshold', 10);
