@@ -305,6 +305,21 @@
         }
         return null;
     }
+    // Le champ "MISE DE DÉPART" est confirmé éditable au clavier (retour utilisateur),
+    // mais son aria-label exact n'a pas pu être vérifié en conditions réelles. On tente
+    // le sélecteur connu, puis on retombe sur le premier <input> proche du libellé texte.
+    function findPriceInput() {
+        let el = document.querySelector('input[aria-label="Mise de départ"]') || document.querySelector('input[aria-label*="départ" i]');
+        if (el) return el;
+        const label = [...document.querySelectorAll('*')].find((e) => e.children.length === 0 && /mise de d[ée]part/i.test(e.textContent || ''));
+        let container = label && label.parentElement;
+        for (let i = 0; i < 4 && container; i++) {
+            const input = container.querySelector('input');
+            if (input) return input;
+            container = container.parentElement;
+        }
+        return null;
+    }
     // "includes" plutôt qu'une égalité stricte : les boutons du site combinent souvent
     // icône + texte + badge (ex: "🗑️ Défausser ⊙+1"), jamais juste le libellé seul.
     function findButtonByText(text) {
@@ -385,8 +400,17 @@
             return { ok: false, reason: 'slots_full', slots };
         }
 
-        const priceInput = document.querySelector('input[aria-label="Mise de départ"]');
-        if (priceInput) setReactInputValue(priceInput, String(Math.max(1, Math.round(price))));
+        const priceInput = findPriceInput();
+        if (priceInput) {
+            const target = String(Math.max(1, Math.round(price)));
+            setReactInputValue(priceInput, target);
+            await sleep(150);
+            if (priceInput.value !== target) {
+                log(`⚠️ Prix pas confirmé pour <b>${title}</b> (champ = "${priceInput.value}", attendu ${target}) — vente probablement au prix par défaut du site.`);
+            }
+        } else {
+            log(`⚠️ Champ de prix introuvable pour <b>${title}</b> — vente au prix par défaut du site (marché).`);
+        }
 
         const durBtn = DURATION_LABELS[duration] && findButtonByText(DURATION_LABELS[duration]);
         if (durBtn) durBtn.click();
