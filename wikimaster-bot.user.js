@@ -329,9 +329,12 @@
     }
     async function ensureOnCollectionPage() {
         if (location.pathname.startsWith('/collection')) return true;
-        const backBtn = findButtonByText('Retour au marché');
-        if (backBtn) {
-            backBtn.click();
+        // "Retour au marché" (après une vente) ou tout lien de nav vers /collection
+        // (ex: sidebar) — navigation SPA en priorité, jamais un rechargement complet
+        // qui couperait la boucle en cours.
+        const trigger = findButtonByText('Retour au marché') || document.querySelector('a[href="/collection"], a[href^="/collection?"]');
+        if (trigger) {
+            trigger.click();
             for (let i = 0; i < 20; i++) {
                 await sleep(150);
                 if (location.pathname.startsWith('/collection')) return true;
@@ -575,6 +578,9 @@
         if (sellRunning) return;
         if (wishlistIds.size === 0) {
             log('⚠️ Aucun favori détecté pour l\'instant — ouvre ta page Liste de souhaits sur le site si tu veux protéger certaines cartes, sinon tout ce qui n\'est pas exclu manuellement sera vendable.');
+        }
+        if (!location.pathname.startsWith('/collection')) {
+            log('⚠️ Tu n\'es pas sur /collection — le bot va essayer d\'y naviguer automatiquement, mais si ça échoue (log "wrong_page"), vas-y toi-même manuellement.');
         }
         sellRunning = true;
         const epoch = ++sellLoopEpoch;
