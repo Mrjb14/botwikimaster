@@ -214,13 +214,14 @@
 
     let sellRunning = false;
     let sellLoopEpoch = 0;
-    const sellStats = { listed: 0, failed: 0, estimatedValue: 0 };
+    const sellStats = { listed: 0, failed: 0, estimatedValue: 0, discarded: 0, discardedValue: 0 };
     const sellAttempted = new Set(); // évite de retraiter la même carte dans une même passe
 
     let sellMarginPct = getSetting('sellMarginPct', 110);
     let sellDuration = getSetting('sellDuration', 60);
     let sellExcludeRaw = getSetting('sellExcludeRaw', 'triathlon');
     let protectLegendary = getSetting('protectLegendary', true);
+    let discardThreshold = getSetting('discardThreshold', 10);
     let rarityFloors = getSetting('rarityFloors', { L: 300, UR: 80, SR: 30, R: 10, PC: 3, C: 1 });
 
     function excludedKeywords() {
@@ -320,7 +321,9 @@
         return location.pathname.startsWith('/collection');
     }
 
-    async function sellViaUI(title, price, duration) {
+    // Recherche une carte par titre sur /collection et ouvre sa fiche (clic sur la tuile).
+    // Factorisé entre sellViaUI et discardViaUI : les deux actions partent du même écran.
+    async function openCardTile(title) {
         if (!(await ensureOnCollectionPage())) return { ok: false, reason: 'wrong_page' };
 
         const searchInput = document.querySelector('input[placeholder="Rechercher par titre ou catégorie..."]');
@@ -339,6 +342,26 @@
         if (!tile) return { ok: false, reason: 'card_not_found' };
         tile.click();
         await sleep(600);
+        return { ok: true };
+    }
+
+    async function discardViaUI(title) {
+        const opened = await openCardTile(title);
+        if (!opened.ok) return opened;
+
+        const discardBtn = findButtonByText('Défausser');
+        if (!discardBtn) return { ok: false, reason: 'no_discard_button' };
+        discardBtn.click();
+        await sleep(600); // immédiat, pas de pop-up de confirmation à gérer
+
+        const nextSearch = document.querySelector('input[placeholder="Rechercher par titre ou catégorie..."]');
+        if (nextSearch) setReactInputValue(nextSearch, '');
+        return { ok: true };
+    }
+
+    async function sellViaUI(title, price, duration) {
+        const opened = await openCardTile(title);
+        if (!opened.ok) return opened;
 
         const sellBtn = findButtonByText('Mettre aux enchères');
         if (!sellBtn) return { ok: false, reason: 'no_sell_button' };
@@ -402,6 +425,29 @@
                     sellAttempted.add(key);
 
                     const priceInfo = await computeSellPrice(rarity, id);
+
+                    // Sous le seuil : l'enchère rapporterait moins que la défausse (1 💰
+                    // garanti, immédiat) et risque en plus de ne trouver aucun acheteur.
+                    if (priceInfo.price < discardThreshold) {
+                        setSellStatus(`🗑️ Défausse : ${title}...`);
+                        const result = await discardViaUI(title);
+                        if (result.ok) {
+                            sellStats.discarded++;
+                            sellStats.discardedValue += 1;
+                            log(`🗑️ Défaussé (prix ${priceInfo.price} 💰 < seuil ${discardThreshold}) : <b>${title}</b> [${rarity}] · +1 💰`);
+                        } else {
+                            sellStats.failed++;
+                            log(`❌ Échec défausse : <b>${title}</b> [${rarity}] · ${result.reason || '?'}`);
+                            if (result.reason === 'wrong_page') {
+                                log('⚠️ Reste sur la page /collection pour que la vente/défausse automatique fonctionne.');
+                                break;
+                            }
+                        }
+                        renderSellStats();
+                        await sleep(1200 + Math.random() * 1800);
+                        continue;
+                    }
+
                     setSellStatus(`🏷️ Mise en vente : ${title}...`);
 
                     let result = await sellViaApi(id, priceInfo.price, sellDuration);
@@ -548,6 +594,10 @@
                     <label for="wmbot-protect-l">🛡️ Ne jamais vendre les Légendaires (L)</label>
                     <input type="checkbox" id="wmbot-protect-l" ${protectLegendary ? 'checked' : ''}>
                 </div>
+                <div class="wmbot-row">
+                    <label for="wmbot-discard-threshold">🗑️ Défausser si prix &lt; (💰)</label>
+                    <input type="number" id="wmbot-discard-threshold" min="0" value="${discardThreshold}">
+                </div>
                 <div class="wmbot-row" style="flex-direction: column; align-items: stretch;">
                     <label for="wmbot-exclude">Mots-clés à toujours exclure (titre, catégorie ou description — séparés par ;)</label>
                     <input type="text" id="wmbot-exclude" placeholder="Ex: triathlon;Carte A" value="${sellExcludeRaw.replace(/"/g, '&quot;')}">
@@ -573,6 +623,7 @@
             duration: panel.querySelector('#wmbot-duration'),
             floors: panel.querySelector('#wmbot-floors'),
             protectL: panel.querySelector('#wmbot-protect-l'),
+            discardThreshold: panel.querySelector('#wmbot-discard-threshold'),
             exclude: panel.querySelector('#wmbot-exclude'),
             sellStatus: panel.querySelector('#wmbot-sell-status'),
             sellStats: panel.querySelector('#wmbot-sell-stats'),
@@ -610,6 +661,10 @@
             setSetting('protectLegendary', protectLegendary);
             log(protectLegendary ? '🛡️ Protection des Légendaires activée.' : '⚠️ Protection des Légendaires désactivée.');
         };
+        els.discardThreshold.onchange = () => {
+            discardThreshold = Math.max(0, parseInt(els.discardThreshold.value, 10) || 0);
+            setSetting('discardThreshold', discardThreshold);
+        };
         panel.querySelectorAll('.wmbot-floor-input').forEach((input) => {
             input.onchange = () => {
                 const r = input.dataset.rarity;
@@ -645,7 +700,7 @@
     function setSellStatus(text) { if (els.sellStatus) els.sellStatus.textContent = text; }
     function renderSellStats() {
         if (!els.sellStats) return;
-        els.sellStats.innerHTML = `Cartes mises en vente : <b>${sellStats.listed}</b><br>Échecs : <b>${sellStats.failed}</b><br>Valeur totale estimée : <b>${sellStats.estimatedValue} 💰</b>`;
+        els.sellStats.innerHTML = `Cartes mises en vente : <b>${sellStats.listed}</b><br>Cartes défaussées : <b>${sellStats.discarded}</b><br>Échecs : <b>${sellStats.failed}</b><br>Valeur totale estimée : <b>${sellStats.estimatedValue + sellStats.discardedValue} 💰</b>`;
     }
     function renderSellerStatus() {
         renderSellStats();
