@@ -1,6 +1,6 @@
 # botwikimaster
 
-Bot d'ouverture de cartes pour [wiki-masters.com](https://www.wiki-masters.com/pulls).
+Bot d'ouverture de cartes et de vente aux enchères pour [wiki-masters.com](https://www.wiki-masters.com/pulls).
 
 C'est un script **Tampermonkey** : il s'exécute directement dans ton navigateur, par-dessus le site, en réutilisant ta session connectée. Il n'y a pas de partie serveur — aucun identifiant n'est stocké ni transmis ailleurs qu'à wiki-masters.com.
 
@@ -8,21 +8,41 @@ C'est un script **Tampermonkey** : il s'exécute directement dans ton navigateur
 
 1. Installe l'extension [Tampermonkey](https://www.tampermonkey.net/) (Chrome, Edge, Firefox).
 2. Ouvre l'icône Tampermonkey → **Créer un nouveau script**, efface le contenu par défaut.
-3. Colle le contenu de [`pack-opener.user.js`](pack-opener.user.js).
+3. Colle le contenu de [`wikimaster-bot.user.js`](wikimaster-bot.user.js).
 4. **Ctrl + S** pour sauvegarder.
 5. Va sur [wiki-masters.com](https://www.wiki-masters.com/), connecté à ton compte, et recharge la page.
 6. Un bouton flottant **📦** apparaît en bas à droite.
 
-## Utilisation
+## 📦 Pack Opener
 
-- Clique sur **📦** pour ouvrir le panneau.
 - **▶️ Démarrer** lance l'ouverture en boucle : le bot ouvre les packs disponibles, puis attend le cooldown avant de recommencer.
 - **Ouvrir 1 pack** fait un tirage manuel unique.
-- Le champ **Cooldown (s)** doit correspondre à celui de ton compte : **180s** pour un compte abonné, **600s** pour un compte gratuit.
+- Le champ **Cooldown (s)** doit correspondre à celui de ton compte : **180s** pour un compte abonné, **600s** pour un compte gratuit (déjà réglé par défaut).
 - Le panneau affiche le nombre de packs ouverts, les cartes obtenues et la répartition par rareté (session en cours).
+
+## 💰 Vente aux enchères
+
+Met automatiquement en vente toute ta collection, **sauf tes favoris**, pour maximiser l'argent du jeu.
+
+- **Prix** : le bot regarde l'historique des ventes de chaque carte sur le marché et la met en vente à **marge % au-dessus du prix moyen** (110% par défaut, réglable). Si aucune vente n'est connue pour la carte, il utilise le **prix plancher par rareté** que tu définis dans le panneau.
+- **Durée d'enchère** réglable (10 min à 24 h).
+- **Cartes à toujours exclure** : une liste de titres séparés par `;`, en plus des favoris.
+- Il essaie d'abord la vente rapide (API), et si le site la refuse, bascule automatiquement sur une simulation de clic sur la page **Collection** — **reste sur cet onglet, sur `/collection` si possible**, pendant que le module tourne.
+- Il retraite toute la collection toutes les 5 minutes (pour couvrir les nouvelles cartes obtenues entre-temps).
+
+### ⭐ Protection des favoris
+
+Le site n'expose pas directement le statut « favori » dans son API de collection. Le bot le détecte **passivement** : dès que tu consultes ta page **Liste de souhaits / Favoris** sur le site, il repère automatiquement les cartes qui s'y trouvent et ne les vend jamais.
+
+**Important** : avant de lancer la vente aux enchères, va au moins une fois sur ta page Favoris pour que le bot les mémorise (le compteur de favoris détectés est visible dans les logs). Tant qu'aucun favori n'a été détecté, le bot te prévient — pense aussi à la liste d'exclusion manuelle en secours.
 
 Le bot doit rester sur un onglet actif et ouvert pour continuer à tourner.
 
 ## Usage responsable
 
-Le site est modéré. Ce script respecte le cooldown de ton compte et espace légèrement chaque requête ; évite quand même de le laisser tourner des heures sans surveillance, un volume de packs anormalement élevé peut attirer l'attention de la modération.
+Le site est modéré. Ce script respecte le cooldown de ton compte, espace légèrement chaque requête et limite le rythme des ventes ; évite quand même de le laisser tourner des heures sans surveillance, un volume anormalement élevé peut attirer l'attention de la modération.
+
+## Limites connues
+
+- Les noms de champs API (`cards`, `packs_remaining`, `card_id`, `final_price`...) n'ont pas pu être vérifiés en conditions réelles depuis l'environnement de développement (accès réseau bloqué vers wiki-masters.com). Si une action échoue silencieusement ou avec une erreur inattendue, récupère la réponse JSON exacte de la requête concernée (onglet Réseau des outils de développement du navigateur) pour qu'on ajuste le code en conséquence.
+- La vente via clic simulé nécessite de rester sur `/collection` : si tu navigues ailleurs pendant une vente, le module se met en pause et te le signale dans les logs.
