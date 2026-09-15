@@ -24,7 +24,8 @@ C'est un script **Tampermonkey** : il s'exécute directement dans ton navigateur
 
 Met automatiquement en vente toute ta collection, **sauf tes favoris**, pour maximiser l'argent du jeu.
 
-- **📎 Exemplaires à garder par carte** (1 par défaut) : le bot écoule les **doublons au-delà de ce nombre**, exemplaire par exemplaire — si tu as 5 copies d'une carte commune, il en vend/défausse 4 et garde 1. La collection est rechargée à chaque passe (toutes les 5 min), donc il continue naturellement tant qu'il reste des doublons, sans jamais abandonner une carte définitivement.
+- **📎 Exemplaires à garder par carte** (1 par défaut) : s'applique uniquement aux cartes qui ont une **vraie valeur marchande** — le bot écoule les doublons au-delà de ce nombre, exemplaire par exemplaire, et garde toujours au moins 1 exemplaire de ces cartes-là. La collection est rechargée à chaque passe (toutes les 5 min), donc il continue naturellement tant qu'il reste des doublons.
+- **🛡️ Garder quand même 1 exemplaire des cartes sans valeur** (décoché par défaut) : par défaut, une carte jugée sans valeur (prix sous le seuil, ou C/PC sans historique de vente) est défaussée **même si c'est ton seul exemplaire** — sinon, si tu n'as aucun doublon dans toute ta collection, rien n'est jamais défaussé. Coche cette case si tu préfères garder 1 exemplaire de chaque carte quoi qu'il arrive.
 
 - **Prix** : le bot regarde l'historique des ventes de chaque carte sur le marché et la met en vente à **marge % au-dessus du prix moyen** (110% par défaut, réglable). Si aucune vente n'est connue pour la carte, il utilise le **prix plancher par rareté** que tu définis dans le panneau.
 - **Durée d'enchère** réglable (10 min à 24 h).

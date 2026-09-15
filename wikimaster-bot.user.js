@@ -219,6 +219,7 @@
     let protectLegendary = getSetting('protectLegendary', true);
     let discardThreshold = getSetting('discardThreshold', 10);
     let keepCopies = getSetting('keepCopies', 1);
+    let protectLastWorthlessCopy = getSetting('protectLastWorthlessCopy', false);
     let rarityFloors = getSetting('rarityFloors', { L: 300, UR: 80, SR: 30, R: 10, PC: 3, C: 1 });
 
     function excludedKeywords() {
@@ -464,24 +465,28 @@
                     const title = cardTitle(item);
                     const rarity = cardRarity(item);
                     const owned = item.count || 1;
-                    const toProcess = Math.max(0, owned - keepCopies);
+
+                    // Prix/statut calculés UNE fois par carte (identiques pour tous ses
+                    // exemplaires) — évite de refaire l'appel marché à chaque copie.
+                    const priceInfo = await computeSellPrice(rarity, id);
+                    const noHistoryCommon = priceInfo.source === 'floor' && (rarity === 'C' || rarity === 'PC');
+                    const isWorthless = priceInfo.price < discardThreshold || noHistoryCommon;
+
+                    // "Garder N exemplaires" protège une carte que tu VEUX — ça n'a pas de
+                    // sens pour une carte jugée sans valeur : sinon un dernier exemplaire
+                    // invendable (le cas le plus courant, aucun doublon) n'est jamais
+                    // défaussé, ce qui vidait totalement ce module en pratique.
+                    const toProcess = isWorthless
+                        ? (protectLastWorthlessCopy ? Math.max(0, owned - keepCopies) : owned)
+                        : Math.max(0, owned - keepCopies);
 
                     // Un item = une carte MODÈLE, `count` exemplaires possédés. On répète
-                    // l'action pour chaque exemplaire au-delà du nombre à garder — sinon les
-                    // doublons ne sont jamais écoulés, un seul exemplaire partait par passe.
+                    // l'action pour chaque exemplaire à traiter — sinon un seul exemplaire
+                    // partait par passe.
                     for (let copy = 0; copy < toProcess; copy++) {
                         if (!isCurrent()) break cardLoop;
 
-                        const priceInfo = await computeSellPrice(rarity, id);
-
-                        // Aucune vente connue sur le marché pour cette carte + rareté C/PC :
-                        // personne ne l'achète jamais à ce niveau de rareté, pas la peine
-                        // d'immobiliser un slot d'enchère → défausse directe.
-                        const noHistoryCommon = priceInfo.source === 'floor' && (rarity === 'C' || rarity === 'PC');
-
-                        // Sous le seuil : l'enchère rapporterait moins que la défausse (1 💰
-                        // garanti, immédiat) et risque en plus de ne trouver aucun acheteur.
-                        if (priceInfo.price < discardThreshold || noHistoryCommon) {
+                        if (isWorthless) {
                             setSellStatus(`🗑️ Défausse : ${title} (${copy + 1}/${toProcess})...`);
                             const result = await discardViaUI(title);
                             if (result.ok) {
@@ -667,8 +672,12 @@
                     <input type="number" id="wmbot-discard-threshold" min="0" value="${discardThreshold}">
                 </div>
                 <div class="wmbot-row">
-                    <label for="wmbot-keep-copies">📎 Exemplaires à garder par carte</label>
+                    <label for="wmbot-keep-copies">📎 Exemplaires à garder par carte (vente)</label>
                     <input type="number" id="wmbot-keep-copies" min="0" value="${keepCopies}">
+                </div>
+                <div class="wmbot-row">
+                    <label for="wmbot-protect-worthless">🛡️ Garder quand même 1 exemplaire des cartes sans valeur</label>
+                    <input type="checkbox" id="wmbot-protect-worthless" ${protectLastWorthlessCopy ? 'checked' : ''}>
                 </div>
                 <div class="wmbot-row" style="flex-direction: column; align-items: stretch;">
                     <label for="wmbot-exclude">Mots-clés à toujours exclure (titre, catégorie ou description — séparés par ;)</label>
@@ -697,6 +706,7 @@
             protectL: panel.querySelector('#wmbot-protect-l'),
             discardThreshold: panel.querySelector('#wmbot-discard-threshold'),
             keepCopies: panel.querySelector('#wmbot-keep-copies'),
+            protectWorthless: panel.querySelector('#wmbot-protect-worthless'),
             exclude: panel.querySelector('#wmbot-exclude'),
             sellStatus: panel.querySelector('#wmbot-sell-status'),
             sellStats: panel.querySelector('#wmbot-sell-stats'),
@@ -741,6 +751,10 @@
         els.keepCopies.onchange = () => {
             keepCopies = Math.max(0, parseInt(els.keepCopies.value, 10) || 0);
             setSetting('keepCopies', keepCopies);
+        };
+        els.protectWorthless.onchange = () => {
+            protectLastWorthlessCopy = els.protectWorthless.checked;
+            setSetting('protectLastWorthlessCopy', protectLastWorthlessCopy);
         };
         panel.querySelectorAll('.wmbot-floor-input').forEach((input) => {
             input.onchange = () => {
