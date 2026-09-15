@@ -487,6 +487,12 @@
                 const totalCopies = queue.reduce((s, it) => s + Math.max(0, (it.count || 1) - keepCopies), 0);
                 log(`💰 ${queue.length} carte(s) distincte(s), ${totalCopies} exemplaire(s) à traiter (garde ${keepCopies} par carte, favoris/L/exclusions écartés).`);
 
+                // Une fois le quota d'enchères actives détecté plein, inutile de retenter une
+                // vente sur cette passe (le quota ne se libère pas tout seul en cours de route) —
+                // mais ça ne doit bloquer ni les défausses ni les autres cartes. Retenté à la
+                // prochaine passe (5 min), le temps que des enchères se terminent.
+                let auctionSlotsFull = false;
+
                 cardLoop:
                 for (const item of queue) {
                     if (!isCurrent()) break;
@@ -508,6 +514,11 @@
                     const toProcess = isWorthless
                         ? (protectLastWorthlessCopy ? Math.max(0, owned - keepCopies) : owned)
                         : Math.max(0, owned - keepCopies);
+
+                    // Cette carte ne peut être que VENDUE (pas de défausse possible) et le
+                    // quota est déjà connu plein sur cette passe : pas la peine d'ouvrir sa
+                    // fiche pour se le refaire dire, on passe direct à la carte suivante.
+                    if (!isWorthless && auctionSlotsFull) continue;
 
                     // Un item = une carte MODÈLE, `count` exemplaires possédés. On répète
                     // l'action pour chaque exemplaire à traiter — sinon un seul exemplaire
@@ -558,9 +569,13 @@
                             log(`✅ Vendu : <b>${title}</b> [${rarity}] · ${priceInfo.price} 💰${src}`);
                         } else if (result.reason === 'slots_full') {
                             // Pas un échec de LA carte : le quota d'enchères actives est plein.
-                            // Inutile d'essayer les suivantes maintenant, ça échouerait pareil.
-                            log(`⏸ Quota d'enchères actives atteint (${result.slots.used}/${result.slots.max}) — pause de la vente jusqu'à la prochaine analyse.`);
-                            break cardLoop;
+                            // On met cette carte de côté (et toutes les prochaines à vendre) pour
+                            // cette passe, mais les défausses et le reste continuent normalement.
+                            if (!auctionSlotsFull) {
+                                auctionSlotsFull = true;
+                                log(`⏸ Quota d'enchères actives atteint (${result.slots.used}/${result.slots.max}) — ventes mises de côté jusqu'à la prochaine analyse, défausses toujours actives.`);
+                            }
+                            continue cardLoop;
                         } else {
                             sellStats.failed++;
                             log(`❌ Échec vente : <b>${title}</b> [${rarity}] · ${result.reason || '?'}`);
