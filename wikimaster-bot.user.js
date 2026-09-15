@@ -69,9 +69,6 @@
     function cardId(c) {
         return c.card_id || (c.card && c.card.id) || null;
     }
-    function userCardId(c) {
-        return c.id || c.user_card_id || null;
-    }
 
     /* ════════════════════════ Détection passive des favoris ════════════════════════
        Le site n'expose pas (à notre connaissance) le statut "favori/wishlist" dans
@@ -215,13 +212,13 @@
     let sellRunning = false;
     let sellLoopEpoch = 0;
     const sellStats = { listed: 0, failed: 0, estimatedValue: 0, discarded: 0, discardedValue: 0 };
-    const sellAttempted = new Set(); // évite de retraiter la même carte dans une même passe
 
     let sellMarginPct = getSetting('sellMarginPct', 110);
     let sellDuration = getSetting('sellDuration', 60);
     let sellExcludeRaw = getSetting('sellExcludeRaw', 'triathlon');
     let protectLegendary = getSetting('protectLegendary', true);
     let discardThreshold = getSetting('discardThreshold', 10);
+    let keepCopies = getSetting('keepCopies', 1);
     let rarityFloors = getSetting('rarityFloors', { L: 300, UR: 80, SR: 30, R: 10, PC: 3, C: 1 });
 
     function excludedKeywords() {
@@ -454,76 +451,94 @@
                 const items = await fetchCollectionAll((loaded) => setSellStatus(`📚 Collection : ${loaded} cartes chargées...`));
                 if (!isCurrent()) break;
 
-                const queue = buildSellQueue(items).filter((item) => !sellAttempted.has(userCardId(item) || cardId(item)));
-                log(`💰 ${queue.length} carte(s) à mettre en vente (favoris et exclusions écartés).`);
+                // La collection est rechargée à chaque passe : pas besoin de mémoriser ce qui a
+                // déjà été tenté, `count` reflète toujours le nombre RÉEL d'exemplaires restants.
+                const queue = buildSellQueue(items);
+                const totalCopies = queue.reduce((s, it) => s + Math.max(0, (it.count || 1) - keepCopies), 0);
+                log(`💰 ${queue.length} carte(s) distincte(s), ${totalCopies} exemplaire(s) à traiter (garde ${keepCopies} par carte, favoris/L/exclusions écartés).`);
 
+                cardLoop:
                 for (const item of queue) {
                     if (!isCurrent()) break;
                     const id = cardId(item);
                     const title = cardTitle(item);
                     const rarity = cardRarity(item);
-                    const key = userCardId(item) || id;
-                    sellAttempted.add(key);
+                    const owned = item.count || 1;
+                    const toProcess = Math.max(0, owned - keepCopies);
 
-                    const priceInfo = await computeSellPrice(rarity, id);
+                    // Un item = une carte MODÈLE, `count` exemplaires possédés. On répète
+                    // l'action pour chaque exemplaire au-delà du nombre à garder — sinon les
+                    // doublons ne sont jamais écoulés, un seul exemplaire partait par passe.
+                    for (let copy = 0; copy < toProcess; copy++) {
+                        if (!isCurrent()) break cardLoop;
 
-                    // Aucune vente connue sur le marché pour cette carte + rareté C/PC :
-                    // personne ne l'achète jamais à ce niveau de rareté, pas la peine
-                    // d'immobiliser un slot d'enchère → défausse directe.
-                    const noHistoryCommon = priceInfo.source === 'floor' && (rarity === 'C' || rarity === 'PC');
+                        const priceInfo = await computeSellPrice(rarity, id);
 
-                    // Sous le seuil : l'enchère rapporterait moins que la défausse (1 💰
-                    // garanti, immédiat) et risque en plus de ne trouver aucun acheteur.
-                    if (priceInfo.price < discardThreshold || noHistoryCommon) {
-                        setSellStatus(`🗑️ Défausse : ${title}...`);
-                        const result = await discardViaUI(title);
+                        // Aucune vente connue sur le marché pour cette carte + rareté C/PC :
+                        // personne ne l'achète jamais à ce niveau de rareté, pas la peine
+                        // d'immobiliser un slot d'enchère → défausse directe.
+                        const noHistoryCommon = priceInfo.source === 'floor' && (rarity === 'C' || rarity === 'PC');
+
+                        // Sous le seuil : l'enchère rapporterait moins que la défausse (1 💰
+                        // garanti, immédiat) et risque en plus de ne trouver aucun acheteur.
+                        if (priceInfo.price < discardThreshold || noHistoryCommon) {
+                            setSellStatus(`🗑️ Défausse : ${title} (${copy + 1}/${toProcess})...`);
+                            const result = await discardViaUI(title);
+                            if (result.ok) {
+                                sellStats.discarded++;
+                                sellStats.discardedValue += 1;
+                                const why = noHistoryCommon
+                                    ? `aucune vente connue, rareté ${rarity}`
+                                    : `prix ${priceInfo.price} 💰 < seuil ${discardThreshold}`;
+                                log(`🗑️ Défaussé (${why}) : <b>${title}</b> [${rarity}] · +1 💰`);
+                            } else {
+                                sellStats.failed++;
+                                log(`❌ Échec défausse : <b>${title}</b> [${rarity}] · ${result.reason || '?'}`);
+                                if (result.reason === 'wrong_page') {
+                                    log('⚠️ Reste sur la page /collection pour que la vente/défausse automatique fonctionne.');
+                                    break cardLoop;
+                                }
+                                // Autre échec (carte introuvable, bouton absent...) : inutile
+                                // d'insister sur cette carte-ci maintenant, on passe à la suivante.
+                                renderSellStats();
+                                continue cardLoop;
+                            }
+                            renderSellStats();
+                            await sleep(1200 + Math.random() * 1800);
+                            continue;
+                        }
+
+                        setSellStatus(`🏷️ Mise en vente : ${title} (${copy + 1}/${toProcess})...`);
+
+                        let result = await sellViaApi(id, priceInfo.price, sellDuration);
+                        if (!result.ok) {
+                            result = await sellViaUI(title, priceInfo.price, sellDuration);
+                        }
+
                         if (result.ok) {
-                            sellStats.discarded++;
-                            sellStats.discardedValue += 1;
-                            const why = noHistoryCommon
-                                ? `aucune vente connue, rareté ${rarity}`
-                                : `prix ${priceInfo.price} 💰 < seuil ${discardThreshold}`;
-                            log(`🗑️ Défaussé (${why}) : <b>${title}</b> [${rarity}] · +1 💰`);
+                            sellStats.listed++;
+                            sellStats.estimatedValue += priceInfo.price;
+                            const src = priceInfo.source === 'market' ? ` (marché ${priceInfo.avg} × ${sellMarginPct}%)` : ' (barème rareté, pas d\'historique)';
+                            log(`✅ Vendu : <b>${title}</b> [${rarity}] · ${priceInfo.price} 💰${src}`);
+                        } else if (result.reason === 'slots_full') {
+                            // Pas un échec de LA carte : le quota d'enchères actives est plein.
+                            // Inutile d'essayer les suivantes maintenant, ça échouerait pareil.
+                            log(`⏸ Quota d'enchères actives atteint (${result.slots.used}/${result.slots.max}) — pause de la vente jusqu'à la prochaine analyse.`);
+                            break cardLoop;
                         } else {
                             sellStats.failed++;
-                            log(`❌ Échec défausse : <b>${title}</b> [${rarity}] · ${result.reason || '?'}`);
+                            log(`❌ Échec vente : <b>${title}</b> [${rarity}] · ${result.reason || '?'}`);
                             if (result.reason === 'wrong_page') {
-                                log('⚠️ Reste sur la page /collection pour que la vente/défausse automatique fonctionne.');
-                                break;
+                                log('⚠️ Reste sur la page /collection pour que la vente automatique fonctionne.');
+                                break cardLoop;
                             }
+                            // Autre échec : on ne s'acharne pas sur cette carte, suivante.
+                            renderSellStats();
+                            continue cardLoop;
                         }
                         renderSellStats();
                         await sleep(1200 + Math.random() * 1800);
-                        continue;
                     }
-
-                    setSellStatus(`🏷️ Mise en vente : ${title}...`);
-
-                    let result = await sellViaApi(id, priceInfo.price, sellDuration);
-                    if (!result.ok) {
-                        result = await sellViaUI(title, priceInfo.price, sellDuration);
-                    }
-
-                    if (result.ok) {
-                        sellStats.listed++;
-                        sellStats.estimatedValue += priceInfo.price;
-                        const src = priceInfo.source === 'market' ? ` (marché ${priceInfo.avg} × ${sellMarginPct}%)` : ' (barème rareté, pas d\'historique)';
-                        log(`✅ Vendu : <b>${title}</b> [${rarity}] · ${priceInfo.price} 💰${src}`);
-                    } else if (result.reason === 'slots_full') {
-                        // Pas un échec de LA carte : le quota d'enchères actives est plein.
-                        // Inutile d'essayer les suivantes maintenant, ça échouerait pareil.
-                        log(`⏸ Quota d'enchères actives atteint (${result.slots.used}/${result.slots.max}) — pause de la vente jusqu'à la prochaine analyse.`);
-                        break;
-                    } else {
-                        sellStats.failed++;
-                        log(`❌ Échec vente : <b>${title}</b> [${rarity}] · ${result.reason || '?'}`);
-                        if (result.reason === 'wrong_page') {
-                            log('⚠️ Reste sur la page /collection pour que la vente automatique fonctionne.');
-                            break;
-                        }
-                    }
-                    renderSellStats();
-                    await sleep(1200 + Math.random() * 1800);
                 }
 
                 if (!isCurrent()) break;
@@ -544,7 +559,6 @@
             log('⚠️ Aucun favori détecté pour l\'instant — ouvre ta page Liste de souhaits sur le site si tu veux protéger certaines cartes, sinon tout ce qui n\'est pas exclu manuellement sera vendable.');
         }
         sellRunning = true;
-        sellAttempted.clear();
         const epoch = ++sellLoopEpoch;
         log('▶️ Démarrage de la Vente aux enchères');
         sellLoop(epoch);
@@ -652,6 +666,10 @@
                     <label for="wmbot-discard-threshold">🗑️ Défausser si prix &lt; (💰)</label>
                     <input type="number" id="wmbot-discard-threshold" min="0" value="${discardThreshold}">
                 </div>
+                <div class="wmbot-row">
+                    <label for="wmbot-keep-copies">📎 Exemplaires à garder par carte</label>
+                    <input type="number" id="wmbot-keep-copies" min="0" value="${keepCopies}">
+                </div>
                 <div class="wmbot-row" style="flex-direction: column; align-items: stretch;">
                     <label for="wmbot-exclude">Mots-clés à toujours exclure (titre, catégorie ou description — séparés par ;)</label>
                     <input type="text" id="wmbot-exclude" placeholder="Ex: triathlon;Carte A" value="${sellExcludeRaw.replace(/"/g, '&quot;')}">
@@ -678,6 +696,7 @@
             floors: panel.querySelector('#wmbot-floors'),
             protectL: panel.querySelector('#wmbot-protect-l'),
             discardThreshold: panel.querySelector('#wmbot-discard-threshold'),
+            keepCopies: panel.querySelector('#wmbot-keep-copies'),
             exclude: panel.querySelector('#wmbot-exclude'),
             sellStatus: panel.querySelector('#wmbot-sell-status'),
             sellStats: panel.querySelector('#wmbot-sell-stats'),
@@ -718,6 +737,10 @@
         els.discardThreshold.onchange = () => {
             discardThreshold = Math.max(0, parseInt(els.discardThreshold.value, 10) || 0);
             setSetting('discardThreshold', discardThreshold);
+        };
+        els.keepCopies.onchange = () => {
+            keepCopies = Math.max(0, parseInt(els.keepCopies.value, 10) || 0);
+            setSetting('keepCopies', keepCopies);
         };
         panel.querySelectorAll('.wmbot-floor-input').forEach((input) => {
             input.onchange = () => {
